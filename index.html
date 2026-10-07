@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>랜덤 자리 배치</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--tx:#1d2433;--mu:#7a8499;--ac:#4f6bed;--bd:#dfe3ee;--desk:#2d3a5c;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12151d;--card:#1c212e;--tx:#eef1f8;--mu:#8e98ae;--ac:#7b92ff;--bd:#2c3345;--desk:#4a5a8a}}
+:root[data-theme="dark"]{--bg:#12151d;--card:#1c212e;--tx:#eef1f8;--mu:#8e98ae;--ac:#7b92ff;--bd:#2c3345;--desk:#4a5a8a}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;padding:16px;max-width:520px;margin:0 auto}
+h1{font-size:20px;display:flex;align-items:center;justify-content:center;gap:8px;margin:8px 0 14px;user-select:none}
+#dice{background:none;border:0;padding:0;margin:0;font:inherit;cursor:default}
+#hid{background:none;border:0;padding:2px;margin:0;display:flex;cursor:default;color:var(--mu)}
+#hid svg{width:30px;height:30px}
+.wrap{display:flex;gap:8px;align-items:stretch;flex-direction:column}
+.wrap.bottom{flex-direction:column-reverse}.wrap.left{flex-direction:row}.wrap.right{flex-direction:row-reverse}
+.desk{background:var(--desk);color:#fff;border-radius:10px;font-size:13px;display:flex;align-items:center;justify-content:center;padding:8px;letter-spacing:4px}
+.wrap.left .desk,.wrap.right .desk{writing-mode:vertical-rl;width:34px}
+.grid{flex:1;display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.seat{background:var(--card);border:1.5px solid var(--bd);border-radius:10px;aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;text-align:center;padding:2px;word-break:keep-all;transition:.25s}
+.seat.spin{color:var(--mu)}.seat.done{border-color:var(--ac);transform:scale(1.04)}
+.row{display:flex;gap:8px;margin:14px 0}
+button.main,select{font:inherit;border-radius:10px;border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:12px}
+button.main{flex:1;background:var(--ac);color:#fff;border:0;font-weight:700;font-size:16px}
+button.main:disabled{opacity:.5}
+#act{display:none;gap:8px}
+#act button{flex:1;background:var(--card);color:var(--tx);border:1px solid var(--bd);font-weight:600;font-size:14px}
+#pv{display:none;width:100%;border-radius:10px;border:1px solid var(--bd);margin-top:4px}
+#hint{display:none;font-size:12px;color:var(--mu);text-align:center;margin:6px 0 0}
+#swapbar{display:none;align-items:center;gap:8px;flex-wrap:wrap;background:#e3f8ea;color:#14532d;border:1.5px solid #2fb36b;border-radius:12px;padding:10px 12px;margin-bottom:10px;font-size:14px;font-weight:600}
+#swapbar span{flex:1;min-width:150px}
+#swapbar button{font:inherit;font-weight:700;border:0;border-radius:8px;padding:8px 14px}
+#ok{display:none;background:#2fb36b;color:#fff}#no{background:#fff;color:#14532d;border:1px solid #2fb36b!important}
+.seat.pick{background:#d9f5e0;border-color:#2fb36b;color:#14532d;cursor:pointer}
+.seat.sel{background:#ffd966;border-color:#e08a00;color:#4a3000;transform:scale(1.06)}
+</style></head><body>
+<h1><button id="dice" aria-label="주사위">🎲</button> 랜덤 자리 배치
+<button id="hid" aria-label="장식"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="9" width="26" height="5" rx="1.5"/><path d="M6 14v13M26 14v13M6 21h20"/></svg></button></h1>
+<div id="swapbar"><span id="msg">교환할 두 자리를 선택하세요</span><button id="ok">체인지</button><button id="no">취소</button></div>
+<div class="wrap" id="wrap"><div class="desk">교 탁</div><div class="grid" id="grid"></div></div>
+<div class="row"><select id="dir"><option value="top">교탁 앞</option><option value="bottom">교탁 뒤</option><option value="left">교탁 왼쪽</option><option value="right">교탁 오른쪽</option></select>
+<button class="main" id="go">자리 뽑기</button></div>
+
+<div class="row" id="act"><button class="main" id="img">🖼 이미지 저장</button><button class="main" id="chg">🔄 체인지</button><button class="main" id="cp">📋 텍스트 복사</button></div>
+<img id="pv" alt="자리 배치표"><p id="hint">이미지가 저장되지 않으면 위 이미지를 길게 눌러 저장하세요.</p>
+
+<script>
+// 미리 정해진 결과 (행 우선: 왼→오, 위→아래) — 제목 옆 책상 아이콘을 누르면 이 결과가 나옵니다
+const FIXED=["조호진","김도균","인도현","신희건","조재윤",
+"조은성","윤상훈","손진영","김도윤","김규민",
+"안영준","유수찬","홍사민","안치윤","신승현",
+"최지호","이태호","박선용","장기은","허정우",
+"이승하","배승민","고광영","이세훈","박주혁"];
+Object.freeze(FIXED); // 원본 명단 보호 (어떤 코드도 수정 불가)
+const $=id=>document.getElementById(id);
+const grid=$("grid"),go=$("go"),cells=[];
+let busy=false,current=null,swap=false,sel=[];
+for(let i=0;i<25;i++){const d=document.createElement("div");d.className="seat";d.textContent=i+1;d.onclick=()=>pick(i);grid.appendChild(d);cells.push(d)}
+$("dir").onchange=e=>{$("wrap").className="wrap "+e.target.value};
+
+function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+
+function run(result){
+  if(busy||swap)return;busy=true;go.disabled=true;current=null;$('act').style.display=$('pv').style.display=$('hint').style.display='none';
+  cells.forEach(c=>c.className="seat spin");
+  const tick=setInterval(()=>{
+    const s=shuffle(FIXED);
+    cells.forEach((c,i)=>{if(!c.classList.contains("done"))c.textContent=s[i]});
+  },80);
+  shuffle([...Array(25).keys()]).forEach((idx,k)=>{
+    setTimeout(()=>{
+      cells[idx].textContent=result[idx];
+      cells[idx].className="seat done";
+      if(k===24){clearInterval(tick);busy=false;go.disabled=false;go.textContent="다시 뽑기";current=result.slice();$('act').style.display='flex'}
+    },1500+k*130);
+  });
+}
+// 예비 명단: 박주혁(24번)은 고정, 나머지 24명은 상하좌우 이웃과 1:1 맞교환 (전원 한 칸 이내)
+function backup(){
+  const FIX=24,m=Array(25).fill(-1);m[FIX]=FIX;
+  const nb=i=>{const r=Math.floor(i/5),c=i%5,a=[];
+    if(r>0)a.push(i-5);if(r<4)a.push(i+5);if(c>0)a.push(i-1);if(c<4)a.push(i+1);return shuffle(a)};
+  (function solve(){
+    const i=m.indexOf(-1);if(i<0)return true;
+    for(const j of nb(i)){if(m[j]!==-1)continue;m[i]=j;m[j]=i;if(solve())return true;m[i]=m[j]=-1}
+    return false;
+  })();
+  return FIXED.map((_,i)=>FIXED[m[i]]);   // FIXED는 읽기만 하고 새 배열 반환
+}
+go.onclick=()=>run(shuffle(FIXED));   // 진짜 랜덤
+$("hid").onclick=()=>run(FIXED);
+$("dice").onclick=()=>run(backup()); // 예비 명단      // 숨겨진 버튼: 정해진 결과
+
+// ---- 체인지(자리 교환) ----
+function setSwap(on){
+  swap=on;sel=[];cells.forEach(c=>c.classList.remove("pick","sel"));
+  if(on)cells.forEach(c=>c.classList.add("pick"));
+  $("swapbar").style.display=on?"flex":"none";$("ok").style.display="none";
+  $("msg").textContent="교환할 두 자리를 선택하세요";
+  go.disabled=on;$("act").style.display=on?"none":(current?"flex":"none");
+  $("pv").style.display=$("hint").style.display="none";
+}
+function pick(i){
+  if(!swap)return;const k=sel.indexOf(i),c=cells[i];
+  if(k>=0){sel.splice(k,1);c.classList.remove("sel");c.classList.add("pick")}
+  else if(sel.length<2){sel.push(i);c.classList.add("sel");c.classList.remove("pick")}
+  $("ok").style.display=sel.length===2?"block":"none";
+  $("msg").textContent=sel.length===2?cells[sel[0]].textContent+" ↔ "+cells[sel[1]].textContent:sel.length===1?"한 자리를 더 선택하세요":"교환할 두 자리를 선택하세요";
+}
+$("chg").onclick=()=>{if(current&&!busy)setSwap(true)};
+$("no").onclick=()=>setSwap(false);
+$("ok").onclick=()=>{
+  if(sel.length!==2)return;const[a,b]=sel;
+  [current[a],current[b]]=[current[b],current[a]];
+  cells[a].textContent=current[a];cells[b].textContent=current[b];
+  setSwap(false);
+};
+// ---- 이미지 생성/저장 ----
+function makeImage(){
+  const dir=$("dir").value,S=150,G=14,P=60,D=70,HD=110,GW=5*S+4*G,side=dir==="left"||dir==="right";
+  const ox=P+(dir==="left"?D+G:0),oy=HD+(dir==="top"?D+G:0);
+  const W=GW+P*2+(side?D+G:0),H=HD+GW+P+(side?0:D+G);
+  const c=document.createElement("canvas");c.width=W;c.height=H;const x=c.getContext("2d");
+  const F='"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif';
+  const rr=(a,b,w,h,r)=>{x.beginPath();x.roundRect?x.roundRect(a,b,w,h,r):x.rect(a,b,w,h)};
+  x.fillStyle="#fff";x.fillRect(0,0,W,H);
+  x.fillStyle="#1d2433";x.textAlign="center";x.textBaseline="middle";
+  x.font="bold 44px "+F;x.fillText("자리 배치표",W/2,44);
+  const d=new Date();x.font="24px "+F;x.fillStyle="#7a8499";
+  x.fillText(d.getFullYear()+"."+(d.getMonth()+1)+"."+d.getDate(),W/2,84);
+  const dx={top:[ox,HD,GW,D],bottom:[ox,oy+GW+G,GW,D],left:[P,oy,D,GW],right:[ox+GW+G,oy,D,GW]}[dir];
+  x.fillStyle="#2d3a5c";rr(...dx,12);x.fill();x.fillStyle="#fff";x.font="bold 30px "+F;
+  if(side){x.fillText("교",dx[0]+D/2,dx[1]+GW/2-20);x.fillText("탁",dx[0]+D/2,dx[1]+GW/2+20)}
+  else x.fillText("교  탁",dx[0]+GW/2,dx[1]+D/2);
+  current.forEach((n,i)=>{
+    const cx=ox+(i%5)*(S+G),cy=oy+Math.floor(i/5)*(S+G);
+    x.fillStyle="#f3f5fb";rr(cx,cy,S,S,14);x.fill();x.strokeStyle="#4f6bed";x.lineWidth=2.5;x.stroke();
+    x.fillStyle="#1d2433";x.font="bold "+(n.length>3?26:32)+"px "+F;x.fillText(n,cx+S/2,cy+S/2);
+    x.fillStyle="#9aa3b8";x.font="16px "+F;x.fillText(i+1,cx+18,cy+18);
+  });
+  return c.toDataURL("image/png");
+}
+$("img").onclick=()=>{
+  if(!current)return;const url=makeImage();
+  $("pv").src=url;$("pv").style.display="block";$("hint").style.display="block";
+  try{const a=document.createElement("a");a.href=url;a.download="자리배치표.png";document.body.appendChild(a);a.click();a.remove()}catch(e){}
+};
+$("cp").onclick=async()=>{
+  if(!current)return;
+  const t=[0,1,2,3,4].map(r=>current.slice(r*5,r*5+5).join("\t")).join("\n");
+  try{await navigator.clipboard.writeText(t);$("cp").textContent="✅ 복사됨"}catch(e){$("cp").textContent="복사 실패"}
+  setTimeout(()=>$("cp").textContent="📋 텍스트 복사",1500);
+};
+</script></body></html>
